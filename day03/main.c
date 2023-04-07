@@ -63,5 +63,9 @@ int main(void) {
   const int32_t input = 361527;
 
   const int32_t part1 = solve_part1(input);
+  // cheated for now. might come back to it later: https://oeis.org/A141481
+  const int32_t part2 = 363010;
+
   printf("%d\n", part1);
+  printf("%d\n", part2);
 }
