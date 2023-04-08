@@ -9,10 +9,11 @@ typedef struct {
 } token;
 
 typedef struct {
-  token tokenBuffer[12];
+  token tokens[12];
   size_t tokenCount;
   uint32_t part1;
-} parsing_context;
+  uint32_t part2;
+} context;
 
 static void tokenize(const char *line, token *const buffer,
                      size_t *const count) {
@@ -28,24 +29,47 @@ static void tokenize(const char *line, token *const buffer,
   } while (*line);
 }
 
-static void parse_line(char *line, size_t length, void *userData) {
-  parsing_context *ctx = userData;
-  tokenize(line, ctx->tokenBuffer, &ctx->tokenCount);
-  for (size_t i = 0; i < ctx->tokenCount - 1; ++i) {
-    const token *const a = &ctx->tokenBuffer[i];
-    for (size_t j = i + 1; j < ctx->tokenCount; ++j) {
-      const token *const b = &ctx->tokenBuffer[j];
-      if (a->length == b->length && memcmp(a->start, b->start, a->length) == 0)
-        goto done;
+static uint32_t calc_str_comb_hash(const char *const str, const size_t length) {
+  size_t hash = 0;
+  for (size_t i = 0; i < length; ++i)
+    hash ^= ((uint32_t)str[i] * 77675651);
+  return (50836909 * hash) ^ (68510521 * length);
+}
+
+static inline int combination_cmp(const void *const a, const void *const b,
+                                  const size_t length) {
+  return (int64_t)calc_str_comb_hash(a, length) -
+         (int64_t)calc_str_comb_hash(b, length);
+}
+
+typedef int (*row_comparator)(const void *const a, const void *const b,
+                              const size_t length);
+
+static bool check_row(const token *const tokens, const size_t tokenCount,
+                      row_comparator comparator) {
+  for (size_t i = 0; i < tokenCount - 1; ++i) {
+    const token *const a = &tokens[i];
+    for (size_t j = i + 1; j < tokenCount; ++j) {
+      const token *const b = &tokens[j];
+      if (a->length == b->length &&
+          comparator(a->start, b->start, a->length) == 0) {
+        return false;
+      }
     }
   }
-  ctx->part1++;
-done:
+  return true;
+}
+
+static void parse_line(char *line, size_t length, void *userData) {
+  context *ctx = userData;
+  tokenize(line, ctx->tokens, &ctx->tokenCount);
+  ctx->part1 += check_row(ctx->tokens, ctx->tokenCount, memcmp);
+  ctx->part2 += check_row(ctx->tokens, ctx->tokenCount, combination_cmp);
 }
 
 int main(void) {
-  parsing_context ctx = {0};
+  context ctx = {0};
   AocReadFileLineByLine("day04/input.txt", parse_line, &ctx);
-
   printf("%u\n", ctx.part1);
+  printf("%u\n", ctx.part2);
 }
