@@ -68,20 +68,19 @@ static void solve(banks *const b, uint32_t *const part1,
   for (;;) {
     const uint8_t index = find_index_of_biggest(data);
 
-    if (data[index] <= BANKS_COUNT) {
-      const uint8_t value = data[index];
-      data[index] = 0;
-      for (uint8_t i = 0; i < value; ++i) {
-        data[(index + i + 1) & (BANKS_COUNT - 1)] += 1;
-      }
-    } else {
-      const uint8_t dist = data[index] / (BANKS_COUNT);
-      const uint8_t rest = data[index] % (BANKS_COUNT);
-      data[index] = 0;
-      data[(index + 1) & (BANKS_COUNT - 1)] += (dist + rest);
-      for (uint8_t i = 1; i < BANKS_COUNT; ++i) {
-        data[(index + i + 1) & (BANKS_COUNT - 1)] += dist;
-      }
+    uint8_t range = data[index];
+    uint8_t dist = 1;
+    uint8_t rest = 0;
+    if (data[index] > BANKS_COUNT) {
+      range = BANKS_COUNT;
+      dist = data[index] / (BANKS_COUNT);
+      rest = data[index] % (BANKS_COUNT);
+    }
+
+    data[index] = 0;
+    data[(index + 1) & (BANKS_COUNT - 1)] += rest;
+    for (uint8_t i = 0; i < range; ++i) {
+      data[(index + i + 1) & (BANKS_COUNT - 1)] += dist;
     }
 
     banks b = {0};
