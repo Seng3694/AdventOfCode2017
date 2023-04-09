@@ -44,6 +44,7 @@ const banks BANKS_EMPTY = {0};
 #define AOC_KEY_T_EQUALS banks_equals
 #define AOC_VALUE_T uint32_t
 #define AOC_VALUE_T_NAME U32
+#define AOC_SIZE_T uint32_t
 #define AOC_BASE2_CAPACITY
 #include <aoc/hashmap.h>
 
@@ -59,46 +60,47 @@ static size_t find_index_of_biggest(const uint8_t data[const BANKS_COUNT]) {
   return index;
 }
 
+static void redistribute(uint8_t *const data, const uint8_t index) {
+  uint8_t range = data[index];
+  uint8_t dist = 1;
+  uint8_t rest = 0;
+  if (data[index] > BANKS_COUNT) {
+    range = BANKS_COUNT;
+    dist = data[index] / (BANKS_COUNT);
+    rest = data[index] % (BANKS_COUNT);
+  }
+  data[index] = 0;
+  data[(index + 1) & (BANKS_COUNT - 1)] += rest;
+  for (uint8_t i = 0; i < range; ++i) {
+    data[(index + i + 1) & (BANKS_COUNT - 1)] += dist;
+  }
+}
+
 static void solve(banks *const b, uint32_t *const part1,
                   uint32_t *const part2) {
-  AocHashmapBanksU32 visitedStates = {0};
-  AocHashmapBanksU32Create(&visitedStates, 16384);
+  AocHashmapBanksU32 states = {0};
+  AocHashmapBanksU32Create(&states, 16384);
   uint8_t *const data = b->data;
 
   for (;;) {
     const uint8_t index = find_index_of_biggest(data);
-
-    uint8_t range = data[index];
-    uint8_t dist = 1;
-    uint8_t rest = 0;
-    if (data[index] > BANKS_COUNT) {
-      range = BANKS_COUNT;
-      dist = data[index] / (BANKS_COUNT);
-      rest = data[index] % (BANKS_COUNT);
-    }
-
-    data[index] = 0;
-    data[(index + 1) & (BANKS_COUNT - 1)] += rest;
-    for (uint8_t i = 0; i < range; ++i) {
-      data[(index + i + 1) & (BANKS_COUNT - 1)] += dist;
-    }
+    redistribute(data, index);
 
     banks b = {0};
     memcpy(&b.data, data, sizeof(uint8_t) * BANKS_COUNT);
     uint32_t hash = 0;
-    if (AocHashmapBanksU32Contains(&visitedStates, b, &hash)) {
-      *part1 = (uint32_t)visitedStates.count + 1;
+    if (AocHashmapBanksU32Contains(&states, b, &hash)) {
+      *part1 = states.count + 1;
       uint32_t previousIndex = 0;
-      AocHashmapBanksU32GetPrehashed(&visitedStates, b, hash, &previousIndex);
-      *part2 = visitedStates.count - previousIndex;
+      AocHashmapBanksU32GetPrehashed(&states, b, hash, &previousIndex);
+      *part2 = states.count - previousIndex;
       goto finish;
     }
-    AocHashmapBanksU32InsertPreHashed(&visitedStates, b,
-                                      (uint32_t)visitedStates.count, hash);
+    AocHashmapBanksU32InsertPreHashed(&states, b, states.count, hash);
   }
 
 finish:
-  AocHashmapBanksU32Destroy(&visitedStates);
+  AocHashmapBanksU32Destroy(&states);
 }
 
 int main(void) {
