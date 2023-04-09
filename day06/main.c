@@ -47,10 +47,6 @@ const banks BANKS_EMPTY = {0};
 #define AOC_BASE2_CAPACITY
 #include <aoc/hashmap.h>
 
-static inline int compare(const void *const a, const void *const b) {
-  return ((int)*(uint8_t *)b) - ((int)*(uint8_t *)a);
-}
-
 static size_t find_index_of_biggest(const uint8_t data[const BANKS_COUNT]) {
   uint8_t biggest = data[0];
   uint8_t index = 0;
