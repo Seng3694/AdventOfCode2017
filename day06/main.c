@@ -94,12 +94,11 @@ static void solve(banks *const b, uint32_t *const part1,
       uint32_t previousIndex = 0;
       AocHashmapBanksU32GetPrehashed(&states, b, hash, &previousIndex);
       *part2 = states.count - previousIndex;
-      goto finish;
+      break;
     }
     AocHashmapBanksU32InsertPreHashed(&states, b, states.count, hash);
   }
 
-finish:
   AocHashmapBanksU32Destroy(&states);
 }
 
@@ -116,4 +115,6 @@ int main(void) {
 
   printf("%u\n", part1);
   printf("%u\n", part2);
+
+  free(input);
 }
