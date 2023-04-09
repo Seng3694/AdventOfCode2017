@@ -36,14 +36,16 @@ static bool banks_equals(const banks *const a, const banks *const b) {
   return true;
 }
 
-#define AOC_T banks
-#define AOC_T_NAME Banks
+#define AOC_KEY_T banks
+#define AOC_KEY_T_NAME Banks
 const banks BANKS_EMPTY = {0};
-#define AOC_T_EMPTY BANKS_EMPTY
-#define AOC_T_HFUNC calculate_banks_hash
-#define AOC_T_EQUALS banks_equals
+#define AOC_KEY_T_EMPTY BANKS_EMPTY
+#define AOC_KEY_T_HFUNC calculate_banks_hash
+#define AOC_KEY_T_EQUALS banks_equals
+#define AOC_VALUE_T uint32_t
+#define AOC_VALUE_T_NAME U32
 #define AOC_BASE2_CAPACITY
-#include <aoc/hashset.h>
+#include <aoc/hashmap.h>
 
 static inline int compare(const void *const a, const void *const b) {
   return ((int)*(uint8_t *)b) - ((int)*(uint8_t *)a);
@@ -61,9 +63,10 @@ static size_t find_index_of_biggest(const uint8_t data[const BANKS_COUNT]) {
   return index;
 }
 
-static uint32_t solve_part1(banks *const b) {
-  AocHashsetBanks visitedStates = {0};
-  AocHashsetBanksCreate(&visitedStates, 16384);
+static void solve(banks *const b, uint32_t *const part1,
+                  uint32_t *const part2) {
+  AocHashmapBanksU32 visitedStates = {0};
+  AocHashmapBanksU32Create(&visitedStates, 16384);
   uint8_t *const data = b->data;
 
   for (;;) {
@@ -88,14 +91,19 @@ static uint32_t solve_part1(banks *const b) {
     banks b = {0};
     memcpy(&b.data, data, sizeof(uint8_t) * BANKS_COUNT);
     uint32_t hash = 0;
-    if (AocHashsetBanksContains(&visitedStates, b, &hash))
+    if (AocHashmapBanksU32Contains(&visitedStates, b, &hash)) {
+      *part1 = (uint32_t)visitedStates.count + 1;
+      uint32_t previousIndex = 0;
+      AocHashmapBanksU32GetPrehashed(&visitedStates, b, hash, &previousIndex);
+      *part2 = visitedStates.count - previousIndex;
       goto finish;
-    AocHashsetBanksInsertPreHashed(&visitedStates, b, hash);
+    }
+    AocHashmapBanksU32InsertPreHashed(&visitedStates, b,
+                                      (uint32_t)visitedStates.count, hash);
   }
 
 finish:
-  AocHashsetBanksDestroy(&visitedStates);
-  return (uint32_t)visitedStates.count + 1;
+  AocHashmapBanksU32Destroy(&visitedStates);
 }
 
 int main(void) {
@@ -105,6 +113,10 @@ int main(void) {
   banks b = {0};
   parse(input, &b);
 
-  const uint32_t part1 = solve_part1(&b);
+  uint32_t part1 = 0;
+  uint32_t part2 = 0;
+  solve(&b, &part1, &part2);
+
   printf("%u\n", part1);
+  printf("%u\n", part2);
 }
