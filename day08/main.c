@@ -166,7 +166,8 @@ static void parse_line(char *line, size_t length, void *userData) {
   AocArrayInstrPush(&p->instructions, instr);
 }
 
-static void run_program(program const *p) {
+static int32_t run_program(program const *p) {
+  int32_t biggestValue = INT32_MIN;
   int32_t *const registers = p->registers.items;
   for (size_t i = 0; i < p->instructions.length; ++i) {
     const instruction *const instr = &p->instructions.items[i];
@@ -223,7 +224,13 @@ static void run_program(program const *p) {
         *targetVar = *targetVar - instr->operand;
       break;
     }
+
+    if (*targetVar > biggestValue) {
+      biggestValue = *targetVar;
+    }
   }
+
+  return biggestValue;
 }
 
 static int32_t solve_part1(program const *p) {
@@ -243,11 +250,11 @@ int main(void) {
 
   AocReadFileLineByLine("day08/input.txt", parse_line, &p);
 
-  run_program(&p);
-
+  const uint32_t part2 = run_program(&p);
   const int32_t part1 = solve_part1(&p);
 
   printf("%d\n", part1);
+  printf("%d\n", part2);
 
   for (size_t i = 0; i < p.registerMap.capacity; ++i)
     if (p.registerMap.keys[i].data != NULL)
