@@ -18,11 +18,13 @@ static uint32_t calc_slice_hash(const slice *const s) {
 
 static inline bool slice_equals(const slice *const a, const slice *const b) {
   return (a->start == NULL && b->start == NULL) ||
-         (a->length == b->length && memcmp(a->start, b->start, a->length) == 0);
+         (a->start != NULL && b->start != NULL && a->length == b->length &&
+          memcmp(a->start, b->start, a->length) == 0);
 }
 
 typedef struct node {
   uint32_t weight;
+  uint32_t totalWeight;
   uint32_t childrenCount;
   char *name;
   struct node *parent;
@@ -115,13 +117,48 @@ static node *find_root(const AocArrayNode *const nodes) {
   return NULL;
 }
 
-static const char *solve_part1(const AocArrayNode *const nodes) {
-  for (size_t i = 0; i < nodes->length; ++i) {
-    if (nodes->items[i].parent == NULL) {
-      return nodes->items[i].name;
+// starting at the root, one child is unbalanced. follow the path until it is
+// balanced again to find the responsible node
+static const node *find_unbalanced(const node *const n) {
+  for (size_t i = 0; i < n->childrenCount - 1; ++i) {
+    const node *const a = n->children[i];
+    const node *const b = n->children[i + 1];
+
+    if (a->totalWeight != b->totalWeight) {
+      // can't be sure if i or i+1 is unbalanced
+      // if there are only 2 nodes then it doesn't matter
+      if (n->childrenCount == 2)
+        return a;
+
+      // if there are more compare with the first or last
+      const node *const nc =
+          i > 0 ? n->children[0] : n->children[n->childrenCount - 1];
+      // return node which leads to the tower being unbalanced
+      return find_unbalanced(nc->totalWeight == a->totalWeight ? b : a);
     }
   }
-  return NULL;
+
+  // at this point all children are balanced which means "n" is the result
+  return n;
+}
+
+static uint32_t update_weights(node *const n) {
+  uint32_t weight = n->weight;
+  for (size_t i = 0; i < n->childrenCount; ++i) {
+    weight += update_weights(n->children[i]);
+  }
+  n->totalWeight = weight;
+  return weight;
+}
+
+static uint32_t solve_part2(node *const root) {
+  update_weights(root);
+  const node *const unbalanced = find_unbalanced(root);
+  const node *const p = unbalanced->parent;
+  const node *const balanced = unbalanced != p->children[0]
+                                   ? p->children[0]
+                                   : p->children[p->childrenCount - 1];
+  return unbalanced->weight + (balanced->totalWeight - unbalanced->totalWeight);
 }
 
 int main(void) {
@@ -136,10 +173,12 @@ int main(void) {
 
   AocReadFileLineByLine("day07/input.txt", parse_line, &ctx);
 
-  const node *const root = find_root(&nodes);
-
   // part 1
+  node *const root = find_root(&nodes);
+  const uint32_t part2 = solve_part2(root);
+
   printf("%s\n", root->name);
+  printf("%u\n", part2);
 
   AocHashmapSliceNodeDestroy(&lookup);
   for (size_t i = 0; i < nodes.length; ++i)
