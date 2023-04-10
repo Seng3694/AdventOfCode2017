@@ -1,33 +1,26 @@
 #include <aoc/aoc.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <ctype.h>
 
 typedef struct {
-  char *data;
+  const char *data;
   size_t length;
-} string;
+} slice;
 
-static uint32_t calc_string_hash(const string *const s) {
+static uint32_t calc_slice_hash(const slice *const s) {
   uint32_t hash = 86952287;
   for (size_t i = 0; i < s->length; ++i)
     hash *= s->data[i] ^ 37157269;
   return hash;
 }
 
-static bool string_equals(const string *const a, const string *const b) {
-  return (a->data == NULL && b->data == NULL) ||
-         (a->data != NULL && b->data != NULL && a->length == b->length &&
-          memcmp(a->data, b->data, a->length) == 0);
-}
-
-#define AOC_KEY_T string
-#define AOC_KEY_T_NAME String
-const string STRING_EMPTY = {0};
-#define AOC_KEY_T_EMPTY STRING_EMPTY
-#define AOC_KEY_T_HFUNC calc_string_hash
-#define AOC_KEY_T_EQUALS string_equals
+#define AOC_KEY_T uint32_t
+#define AOC_KEY_T_NAME U32
+const uint32_t U32_EMPTY = 0x1deadb0b;
+#define AOC_KEY_T_EMPTY U32_EMPTY
+#define AOC_KEY_T_HFUNC(x) (*x)
+#define AOC_KEY_T_EQUALS(a, b) (*a == *b)
 #define AOC_VALUE_T uint32_t
 #define AOC_VALUE_T_NAME U32
 #define AOC_BASE2_CAPACITY
@@ -80,13 +73,17 @@ typedef struct {
 #include <aoc/array.h>
 
 typedef struct {
-  AocHashmapStringU32 registerMap;
   AocArrayI32 registers;
   AocArrayInstr instructions;
 } program;
 
-static string parse_identifier(char *str, char **end) {
-  string s = {.data = str};
+typedef struct {
+  AocHashmapU32U32 registerMap;
+  program *const p;
+} parsing_context;
+
+static slice parse_identifier(char *str, char **end) {
+  slice s = {.data = str};
   while (isalpha(*str))
     str++;
   s.length = str - s.data;
@@ -123,47 +120,41 @@ static rel_op_type parse_rel_op(char *str, char **end) {
   }
 }
 
-static uint32_t get_identifier_key(program *const p, string s) {
-  uint32_t hash = 0;
+static uint32_t get_identifier_key(parsing_context *const ctx, slice s) {
+  uint32_t hash = calc_slice_hash(&s);
   uint32_t key = 0;
-  if (AocHashmapStringU32Contains(&p->registerMap, s, &hash)) {
-    AocHashmapStringU32GetPrehashed(&p->registerMap, s, hash, &key);
-  } else {
-    char *str = malloc(s.length + 1);
-    memcpy(str, s.data, s.length);
-    str[s.length] = '\0';
-    s.data = str;
-
-    key = p->registers.length;
-    AocHashmapStringU32InsertPreHashed(&p->registerMap, s, p->registers.length,
-                                       hash);
-    AocArrayI32Push(&p->registers, 0);
+  // only store hashes. actual identifiers are not needed
+  if (!AocHashmapU32U32GetPrehashed(&ctx->registerMap, hash, hash, &key)) {
+    key = ctx->p->registers.length;
+    AocHashmapU32U32InsertPreHashed(&ctx->registerMap, hash,
+                                    ctx->p->registers.length, hash);
+    AocArrayI32Push(&ctx->p->registers, 0);
   }
   return key;
 }
 
 static void parse_line(char *line, size_t length, void *userData) {
-  program *const p = userData;
+  parsing_context *const ctx = userData;
 
   // example: "bok dec -712 if cie >= -22"
   // identifier1 op operand1 IF identifier2 rel_op operand2
 
-  const string identifier1 = parse_identifier(line, &line);
+  const slice identifier1 = parse_identifier(line, &line);
   const operation_type op = *(++line) == 'd' ? OP_DEC : OP_INC;
   const int32_t operand1 = strtol(line + 4, &line, 10);
-  const string identifier2 = parse_identifier(line + 4, &line);
+  const slice identifier2 = parse_identifier(line + 4, &line);
   const rel_op_type relOp = parse_rel_op(line + 1, &line);
   const int32_t operand2 = strtol(line + 1, NULL, 10);
 
   instruction instr = {
-      .targetVariable = get_identifier_key(p, identifier1),
-      .checkVariable = get_identifier_key(p, identifier2),
+      .targetVariable = get_identifier_key(ctx, identifier1),
+      .checkVariable = get_identifier_key(ctx, identifier2),
       .type = (REL_OP_COUNT * op) + relOp,
       .operand = operand1,
       .checkOperand = operand2,
   };
 
-  AocArrayInstrPush(&p->instructions, instr);
+  AocArrayInstrPush(&ctx->p->instructions, instr);
 }
 
 static int32_t run_program(program const *p) {
@@ -244,11 +235,14 @@ static int32_t solve_part1(program const *p) {
 
 int main(void) {
   program p = {0};
-  AocHashmapStringU32Create(&p.registerMap, 32);
   AocArrayI32Create(&p.registers, 32);
   AocArrayInstrCreate(&p.instructions, 1080);
 
-  AocReadFileLineByLine("day08/input.txt", parse_line, &p);
+  parsing_context ctx = {.p = &p};
+  AocHashmapU32U32Create(&ctx.registerMap, 32);
+
+  AocReadFileLineByLine("day08/input.txt", parse_line, &ctx);
+  AocHashmapU32U32Destroy(&ctx.registerMap);
 
   const uint32_t part2 = run_program(&p);
   const int32_t part1 = solve_part1(&p);
@@ -256,11 +250,6 @@ int main(void) {
   printf("%d\n", part1);
   printf("%d\n", part2);
 
-  for (size_t i = 0; i < p.registerMap.capacity; ++i)
-    if (p.registerMap.keys[i].data != NULL)
-      free(p.registerMap.keys[i].data);
-
-  AocHashmapStringU32Destroy(&p.registerMap);
   AocArrayI32Destroy(&p.registers);
   AocArrayInstrDestroy(&p.instructions);
 }
