@@ -55,14 +55,20 @@ static uint32_t distance(const position pos) {
     return MAX(abs(pos.x), abs(pos.y));
 }
 
-static uint32_t solve_part1(const AocArrayDirs *const dirs) {
+static void solve(const AocArrayDirs *const dirs, uint32_t *const part1,
+                  uint32_t *const part2) {
+  uint32_t furthest = 0;
   position current = {0};
   for (size_t i = 0; i < dirs->length; ++i) {
     const position move = MOVE_VALUES[dirs->items[i]];
     current.x += move.x;
     current.y += move.y;
+    const uint32_t d = distance(current);
+    if (d > furthest)
+      furthest = d;
   }
-  return distance(current);
+  *part1 = distance(current);
+  *part2 = furthest;
 }
 
 int main(void) {
@@ -73,9 +79,12 @@ int main(void) {
   AocArrayDirsCreate(&dirs, 8300);
   parse(input, &dirs);
 
-  uint32_t part1 = solve_part1(&dirs);
+  uint32_t part1 = 0;
+  uint32_t part2 = 0;
+  solve(&dirs, &part1, &part2);
 
   printf("%u\n", part1);
+  printf("%u\n", part2);
 
   AocArrayDirsDestroy(&dirs);
   free(input);
