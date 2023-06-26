@@ -122,14 +122,36 @@ static void solve_part1(char *const programs,
   }
 }
 
+static void solve_part2(char *const programs,
+                        const AocArrayInstr *const instructions) {
+  const char *start = "abcdefghijklmnop";
+  uint32_t runs = 0;
+  // start at 2 because initial value and one dance is already done
+  // search for repeating pattern
+  for (uint32_t i = 2;; ++i) {
+    solve_part1(programs, instructions);
+    if (strcmp(programs, start) == 0) {
+      // i is the cycle length. find required runs for the solution
+      runs = 1000000000 % i;
+      break;
+    }
+  }
+
+  for (uint32_t i = 0; i < runs; ++i)
+    solve_part1(programs, instructions);
+}
+
 int main(void) {
   AocArrayInstr instructions = {0};
   AocArrayInstrCreate(&instructions, 10000);
   parse("day16/input.txt", &instructions);
 
   char programs[17] = "abcdefghijklmnop";
-  solve_part1(programs, &instructions);
 
+  solve_part1(programs, &instructions);
+  printf("%s\n", programs);
+
+  solve_part2(programs, &instructions);
   printf("%s\n", programs);
 
   AocArrayInstrDestroy(&instructions);
