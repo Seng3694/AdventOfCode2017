@@ -36,9 +36,23 @@ static uint32_t solve_part1(const uint32_t step) {
   return current->right->value;
 }
 
+static uint32_t solve_part2(const uint32_t step) {
+  uint32_t insertionIndex = 0;
+  uint32_t valueAfterZero = 0;
+  for (uint32_t value = 1; value < 50000000; ++value) {
+    insertionIndex = ((insertionIndex + step) % value) + 1;
+    if (insertionIndex == 1)
+      valueAfterZero = value;
+  }
+  return valueAfterZero;
+}
+
 int main(void) {
   const uint32_t input = 303;
 
   const uint32_t part1 = solve_part1(input);
   printf("%u\n", part1);
+
+  const uint32_t part2 = solve_part2(input);
+  printf("%u\n", part2);
 }
