@@ -17,22 +17,14 @@ typedef union {
 #define INSTR_LIST(code)                                                       \
   code(snd_r), code(snd_i), code(set_rr), code(set_ri), code(add_rr),          \
       code(add_ri), code(mul_rr), code(mul_ri), code(mod_rr), code(mod_ri),    \
-      code(rcv_r), code(rcv_i), code(jgz_rr), code(jgz_ri), code(jgz_ir),      \
-      code(jgz_ii)
+      code(rcv_r), code(jgz_rr), code(jgz_ri), code(jgz_ir), code(jgz_ii)
 
 #define INSTR_TYPE(v) instr_type_##v
 #define INSTR_LABEL(v) instr_##v
 
-#define STRINGIFY(x) #x
-#define INSTR_DBG_ARR(v) [INSTR_TYPE(v)] = STRINGIFY(v)
-
 typedef enum {
   INSTR_LIST(INSTR_TYPE),
 } instruction_type;
-
-const static char mnemonics[][32] = {
-    INSTR_LIST(INSTR_DBG_ARR),
-};
 
 typedef struct {
   instruction_type type;
@@ -130,7 +122,7 @@ static void parse(char *line, size_t length, void *userData) {
     line += 4;
     parse_argument(line, &line, &isRegister1, &value1);
     instr.operand1 = value1;
-    instr.type = instr_type_rcv_r + (!isRegister1);
+    instr.type = instr_type_rcv_r;
     break;
   case 's': /* set or snd */
     line++;
@@ -212,11 +204,6 @@ static int64_t solve_part1(const AocArrayInstr *const instructions) {
         return lastPlayedSound;
       DISPATCH();
     }
-    INSTR_LABEL(rcv_i) : {
-      if (instr[pc].operand1 != 0)
-        return lastPlayedSound;
-      DISPATCH();
-    }
     INSTR_LABEL(jgz_rr) : {
       if (r.data[instr[pc].operand1] > 0)
         pc += r.data[instr[pc].operand2] - 1;
@@ -243,14 +230,145 @@ static int64_t solve_part1(const AocArrayInstr *const instructions) {
   return -1; // should never reach
 }
 
+#define AOC_T int64_t
+#define AOC_T_NAME I64
+#define AOC_BASE2_CAPACITY
+#include <aoc/deque.h>
+
+typedef enum {
+  EXECUTION_STATE_READY,
+  EXECUTION_STATE_WAITING,
+} execution_state;
+
+typedef struct {
+  registers r;
+  uint32_t pc;
+  execution_state state;
+  AocDequeI64 queue;
+} program_state;
+
+#undef INSTR_LABEL
+#define INSTR_LABEL(name) case INSTR_TYPE(name)
+
+static void cycle(program_state *const prog, program_state *const other,
+                  const AocArrayInstr *const instructions) {
+  const instruction *const instr = &instructions->items[prog->pc];
+  prog->state = EXECUTION_STATE_READY;
+
+  switch (instr->type) {
+    INSTR_LABEL(snd_r) : {
+      AocDequeI64PushBack(&other->queue, prog->r.data[instr->operand1]);
+      other->state = EXECUTION_STATE_READY;
+      break;
+    }
+    INSTR_LABEL(snd_i) : {
+      AocDequeI64PushBack(&other->queue, instr->operand1);
+      other->state = EXECUTION_STATE_READY;
+      break;
+    }
+    INSTR_LABEL(set_rr) : {
+      prog->r.data[instr->operand1] = prog->r.data[instr->operand2];
+      break;
+    }
+    INSTR_LABEL(set_ri) : {
+      prog->r.data[instr->operand1] = instr->operand2;
+      break;
+    }
+    INSTR_LABEL(add_rr) : {
+      prog->r.data[instr->operand1] += prog->r.data[instr->operand2];
+      break;
+    }
+    INSTR_LABEL(add_ri) : {
+      prog->r.data[instr->operand1] += instr->operand2;
+      break;
+    }
+    INSTR_LABEL(mul_rr) : {
+      prog->r.data[instr->operand1] *= prog->r.data[instr->operand2];
+      break;
+    }
+    INSTR_LABEL(mul_ri) : {
+      prog->r.data[instr->operand1] *= instr->operand2;
+      break;
+    }
+    INSTR_LABEL(mod_rr) : {
+      prog->r.data[instr->operand1] %= prog->r.data[instr->operand2];
+      break;
+    }
+    INSTR_LABEL(mod_ri) : {
+      prog->r.data[instr->operand1] %= instr->operand2;
+      break;
+    }
+    INSTR_LABEL(rcv_r) : {
+      if (prog->queue.length > 0) {
+        prog->r.data[instr->operand1] = *AocDequeI64PeekFront(&prog->queue);
+        AocDequeI64PopFront(&prog->queue);
+      } else {
+        prog->state = EXECUTION_STATE_WAITING;
+        return;
+      }
+      break;
+    }
+    INSTR_LABEL(jgz_rr) : {
+      if (prog->r.data[instr->operand1] > 0)
+        prog->pc += prog->r.data[instr->operand2] - 1;
+      break;
+    }
+    INSTR_LABEL(jgz_ri) : {
+      if (prog->r.data[instr->operand1] > 0)
+        prog->pc += instr->operand2 - 1;
+      break;
+    }
+    INSTR_LABEL(jgz_ir) : {
+      if (instr->operand1 > 0)
+        prog->pc += prog->r.data[instr->operand2] - 1;
+      break;
+    }
+    INSTR_LABEL(jgz_ii) : {
+      if (instr->operand1 > 0)
+        prog->pc += instr->operand2 - 1;
+      break;
+    }
+  }
+  prog->pc++;
+}
+
+static uint32_t solve_part2(const AocArrayInstr *const instructions) {
+  program_state prog0 = {0};
+  program_state prog1 = {0};
+  prog1.r.p = 1;
+
+  AocDequeI64Create(&prog0.queue, 128);
+  AocDequeI64Create(&prog1.queue, 128);
+
+  uint32_t sendCount = 0;
+
+  do {
+    while (prog0.state != EXECUTION_STATE_WAITING)
+      cycle(&prog0, &prog1, instructions);
+
+    while (prog1.state != EXECUTION_STATE_WAITING)
+      cycle(&prog1, &prog0, instructions);
+
+    sendCount += (uint32_t)prog0.queue.length;
+  } while (prog0.state != EXECUTION_STATE_WAITING ||
+           prog1.state != EXECUTION_STATE_WAITING);
+
+  AocDequeI64Destroy(&prog0.queue);
+  AocDequeI64Destroy(&prog1.queue);
+
+  return sendCount;
+}
+
 int main(void) {
   AocArrayInstr instructions = {0};
   AocArrayInstrCreate(&instructions, 42);
   AocReadFileLineByLine("day18/input.txt", parse, &instructions);
 
   const int64_t part1 = solve_part1(&instructions);
+  const uint32_t part2 = solve_part2(&instructions);
 
   printf("%ld\n", part1);
+  printf("%u\n", part2);
 
   AocArrayInstrDestroy(&instructions);
 }
