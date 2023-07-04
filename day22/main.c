@@ -9,11 +9,6 @@ typedef struct {
   int64_t y;
 } vector2i;
 
-typedef struct map_part {
-  vector2i offset;
-  uint32_t data;
-} map_part;
-
 const vector2i EMPTY_VEC = {INT64_MIN, INT64_MIN};
 
 static inline uint32_t calc_vec_hash(const vector2i *const vec) {
@@ -28,8 +23,8 @@ static inline bool vec_equals(const vector2i *const a,
 
 #define AOC_KEY_T vector2i
 #define AOC_KEY_T_NAME Vec
-#define AOC_VALUE_T map_part
-#define AOC_VALUE_T_NAME Map
+#define AOC_VALUE_T char
+#define AOC_VALUE_T_NAME State
 #define AOC_KEY_T_EMPTY EMPTY_VEC
 #define AOC_KEY_T_HFUNC calc_vec_hash
 #define AOC_KEY_T_EQUALS vec_equals
@@ -50,20 +45,9 @@ typedef struct {
 } carrier;
 
 typedef struct {
-  AocHashmapVecMap maps;
-  map_part current;
+  AocHashmapVecState map;
   carrier carrier;
 } context;
-
-static void get_map_part(context *const ctx, const vector2i offset,
-                         map_part *part) {
-  uint32_t hash = 0;
-  if (!AocHashmapVecMapContains(&ctx->maps, offset, &hash)) {
-    AocHashmapVecMapInsertPreHashed(&ctx->maps, offset,
-                                    (map_part){.offset = offset}, hash);
-  }
-  AocHashmapVecMapGetPrehashed(&ctx->maps, offset, hash, part);
-}
 
 static inline direction turn_right(const direction dir) {
   return (direction)((((uint8_t)dir) + 1) & 3);
@@ -73,59 +57,20 @@ static inline direction turn_left(const direction dir) {
   return (direction)((((uint8_t)dir) - 1) & 3);
 }
 
-static void move(context *const ctx) {
-  vector2i newPos = ctx->carrier.position;
-  switch (ctx->carrier.dir) {
-  case DIRECTION_UP:
-    newPos.y--;
-    if (newPos.y < 0) {
-      get_map_part(ctx,
-                   (vector2i){
-                       .x = ctx->current.offset.x,
-                       .y = ctx->current.offset.y - 4,
-                   },
-                   &ctx->current);
-      newPos.y = 3;
-    }
-    break;
-  case DIRECTION_RIGHT:
-    newPos.x++;
-    if (newPos.x > 3) {
-      get_map_part(ctx,
-                   (vector2i){
-                       .x = ctx->current.offset.x + 4,
-                       .y = ctx->current.offset.y,
-                   },
-                   &ctx->current);
-      newPos.x = 0;
-    }
-    break;
-  case DIRECTION_DOWN:
-    newPos.y++;
-    if (newPos.y > 3) {
-      get_map_part(ctx,
-                   (vector2i){
-                       .x = ctx->current.offset.x,
-                       .y = ctx->current.offset.y + 4,
-                   },
-                   &ctx->current);
-      newPos.y = 0;
-    }
-    break;
-  case DIRECTION_LEFT:
-    newPos.x--;
-    if (newPos.x < 0) {
-      get_map_part(ctx,
-                   (vector2i){
-                       .x = ctx->current.offset.x - 4,
-                       .y = ctx->current.offset.y,
-                   },
-                   &ctx->current);
-      newPos.x = 3;
-    }
-    break;
-  }
-  ctx->carrier.position = newPos;
+static const vector2i MOVE_TABLE[] = {
+    [DIRECTION_UP] = {0, -1},
+    [DIRECTION_RIGHT] = {1, 0},
+    [DIRECTION_DOWN] = {0, 1},
+    [DIRECTION_LEFT] = {-1, 0},
+};
+
+static inline void add_vector(vector2i *const vec, const vector2i other) {
+  vec->x += other.x;
+  vec->y += other.y;
+}
+
+static inline void move(context *const ctx) {
+  add_vector(&ctx->carrier.position, MOVE_TABLE[ctx->carrier.dir]);
 }
 
 static void parse(const char *const path, context *const ctx) {
@@ -134,67 +79,50 @@ static void parse(const char *const path, context *const ctx) {
   AocReadFileToString(path, &content, &length);
   // map is 25x25 big
   // start is at 12/12
-  // each map part is 4x4
-  // create 7x7 map parts initially
-  //
-  // with the start being in the 3/3 map part
-  // map parts use local coords. so it maps to 0, 0
-
-  AocHashmapVecMapCreate(&ctx->maps, 64);
+  AocHashmapVecStateCreate(&ctx->map, 4096);
   ctx->carrier = (carrier){
-      .position = {0, 0},
+      .position = {12, 12},
       .dir = DIRECTION_UP,
   };
-
-  for (uint32_t y = 0; y < 7; ++y) {
-    for (uint32_t x = 0; x < 7; ++x) {
-      const vector2i offset = {.x = x * 4, .y = y * 4};
-      map_part part = {.offset = offset};
-      for (uint32_t my = 0; my < 4; ++my) {
-        for (uint32_t mx = 0; mx < 4; ++mx) {
-          const uint32_t mapIndex = my * 4 + mx;
-          const uint32_t sourceY = (y * 4) + my;
-          const uint32_t sourceX = (x * 4) + mx;
-          if (sourceY > 24 || sourceX > 24)
-            continue;
-          const uint32_t sourceIndex = sourceY * 26 + sourceX;
-          if (content[sourceIndex] == '#')
-            part.data = AOC_SET_BIT(part.data, mapIndex);
-        }
-      }
-
-      AocHashmapVecMapInsert(&ctx->maps, offset, part);
+  for (int64_t y = 0; y < 25; ++y) {
+    for (int64_t x = 0; x < 25; ++x) {
+      AocHashmapVecStateInsert(&ctx->map, (vector2i){x, y},
+                               content[y * 26 + x]);
     }
   }
-
-  // get part where the start lies
-  AocHashmapVecMapGet(&ctx->maps, (vector2i){.x = 12, .y = 12}, &ctx->current);
-
   free(content);
 }
 
-static inline bool is_infected(context *const ctx) {
-  return AOC_CHECK_BIT(ctx->current.data,
-                       ctx->carrier.position.y * 4 + ctx->carrier.position.x);
+static char get_state(context *const ctx) {
+  char out = '.';
+  uint32_t hash = 0;
+  if (AocHashmapVecStateContains(&ctx->map, ctx->carrier.position, &hash))
+    AocHashmapVecStateGet(&ctx->map, ctx->carrier.position, &out);
+  return out;
 }
 
-static inline void toggle_status(context *const ctx) {
-  ctx->current.data = AOC_TOGGLE_BIT(
-      ctx->current.data, ctx->carrier.position.y * 4 + ctx->carrier.position.x);
-  AocHashmapVecMapRemove(&ctx->maps, ctx->current.offset);
-  AocHashmapVecMapInsert(&ctx->maps, ctx->current.offset, ctx->current);
+static void set_state(context *const ctx, const char state) {
+  uint32_t hash = 0;
+  if (AocHashmapVecStateContains(&ctx->map, ctx->carrier.position, &hash))
+    AocHashmapVecStateRemovePreHashed(&ctx->map, ctx->carrier.position, hash);
+
+  AocHashmapVecStateInsertPreHashed(&ctx->map, ctx->carrier.position, state,
+                                    hash);
 }
 
 static uint32_t solve_part1(context *const ctx) {
   uint32_t infections = 0;
   for (uint32_t i = 0; i < 10000; ++i) {
-    const bool isInfected = is_infected(ctx);
+    const bool isInfected = get_state(ctx) == '#';
     ctx->carrier.dir =
         isInfected ? turn_right(ctx->carrier.dir) : turn_left(ctx->carrier.dir);
-    if (!isInfected)
-      infections++;
 
-    toggle_status(ctx);
+    if (!isInfected) {
+      infections++;
+      set_state(ctx, '#');
+    } else {
+      set_state(ctx, '.');
+    }
 
     move(ctx);
   }
@@ -209,5 +137,5 @@ int main(void) {
 
   printf("%u\n", part1);
 
-  AocHashmapVecMapDestroy(&ctx.maps);
+  AocHashmapVecStateDestroy(&ctx.map);
 }
