@@ -37,27 +37,48 @@ static inline bool check_bit(const uint64_t num, const int bit) {
   return (num & (1ULL << bit)) == (1ULL << bit);
 }
 
-static uint32_t build(size_t current, uint64_t availablePieces,
-                      const uint8_t requiredPort,
-                      const AocArrayBridge *const bridges) {
-  uint32_t strongest = 0;
+typedef struct {
+  uint32_t strength;
+  uint32_t length;
+} bridge_info;
+
+typedef bool (*comparator_func)(const bridge_info, const bridge_info);
+
+static inline bool is_strongest(const bridge_info a, const bridge_info b) {
+  return a.strength > b.strength;
+}
+
+static inline bool is_longest_and_strongest(const bridge_info a,
+                                            const bridge_info b) {
+  return a.length > b.length ||
+         (a.length == b.length && a.strength > b.strength);
+}
+
+static bridge_info build(size_t current, uint64_t availablePieces,
+                         const uint8_t requiredPort, const uint32_t length,
+                         comparator_func comparator,
+                         const AocArrayBridge *const bridges) {
+  bridge_info best = {.length = length};
   for (size_t i = 0; i < bridges->length; ++i) {
     const bridge *const b = &bridges->items[i];
     if (check_bit(availablePieces, i) &&
         (b->port1 == requiredPort || b->port2 == requiredPort)) {
-      uint32_t strength =
-          build(i, clear_bit(availablePieces, (int)i),
-                b->port1 == requiredPort ? b->port2 : b->port1, bridges);
-      if (strength > strongest)
-        strongest = strength;
+      bridge_info info = build(i, clear_bit(availablePieces, (int)i),
+                               b->port1 == requiredPort ? b->port2 : b->port1,
+                               length + 1, comparator, bridges);
+      if (comparator(info, best))
+        best = info;
     }
   }
-  return strongest + bridges->items[current].port1 +
-         bridges->items[current].port2;
+  return (bridge_info){.strength = best.strength +
+                                   bridges->items[current].port1 +
+                                   bridges->items[current].port2,
+                       .length = best.length};
 }
 
-static uint32_t solve_part1(const AocArrayBridge *const bridges) {
-  uint32_t strongest = 0;
+static uint32_t solve(const AocArrayBridge *const bridges,
+                      comparator_func comparator) {
+  bridge_info best = {0};
   uint64_t availablePieces = 0;
   for (size_t i = 0; i < bridges->length; ++i)
     availablePieces = set_bit(availablePieces, (int)i);
@@ -65,14 +86,15 @@ static uint32_t solve_part1(const AocArrayBridge *const bridges) {
   for (size_t i = 0; i < bridges->length; ++i) {
     const bridge *const b = &bridges->items[i];
     if (is_starting_bridge(*b)) {
-      uint32_t strength = build(i, clear_bit(availablePieces, (int)i),
-                                b->port1 == 0 ? b->port2 : b->port1, bridges);
-      if (strength > strongest)
-        strongest = strength;
+      bridge_info info =
+          build(i, clear_bit(availablePieces, (int)i),
+                b->port1 == 0 ? b->port2 : b->port1, 1, comparator, bridges);
+      if (comparator(info, best))
+        best = info;
     }
   }
 
-  return strongest;
+  return best.strength;
 }
 
 int main(void) {
@@ -80,9 +102,11 @@ int main(void) {
   AocArrayBridgeCreate(&bridges, MAX_BRIDGES);
   AocReadFileLineByLine("day24/input.txt", parse, &bridges);
 
-  const uint32_t part1 = solve_part1(&bridges);
+  const uint32_t part1 = solve(&bridges, is_strongest);
+  const uint32_t part2 = solve(&bridges, is_longest_and_strongest);
 
   printf("%u\n", part1);
+  printf("%u\n", part2);
 
   AocArrayBridgeDestroy(&bridges);
 }
